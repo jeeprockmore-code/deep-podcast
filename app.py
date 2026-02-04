@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import json
 import requests
-import uuid  # ✅ 必须用到这个库生成身份证号
+import uuid  # ✅ 必须用到这个库生成身份证号 reqid
 import base64
 import re
 import ast
@@ -195,20 +195,33 @@ PODCAST_PROMPT = """
 def parse_json_robust(content):
     if not content: return None
     clean_content = re.sub(r"```json|```", "", content).strip()
+    
+    # 找 {}
     first_brace = clean_content.find("{")
+    # 找 []
     first_bracket = clean_content.find("[")
+    
     start = -1
-    if first_brace != -1 and first_bracket != -1: start = min(first_brace, first_bracket)
-    elif first_brace != -1: start = first_brace
-    elif first_bracket != -1: start = first_bracket
+    if first_brace != -1 and first_bracket != -1:
+        start = min(first_brace, first_bracket)
+    elif first_brace != -1:
+        start = first_brace
+    elif first_bracket != -1:
+        start = first_bracket
+        
     if start == -1: return None
+    
     end = max(clean_content.rfind("}"), clean_content.rfind("]"))
     if end == -1: return None
+    
     json_str = clean_content[start:end+1]
+    
     try:
+        # 尝试宽松解析
         return json.loads(json_str, strict=False)
     except:
         try:
+            # 兜底：处理 true/false 小写问题，使用 Python 的 ast
             fixed_str = json_str.replace("true", "True").replace("false", "False").replace("null", "None")
             return ast.literal_eval(fixed_str)
         except:
@@ -238,7 +251,7 @@ def generate_podcast_script(analysis_json_str, api_key):
             if isinstance(data, list): return {"podcast": data}
             return data
         else:
-            st.warning("⚠️ 剧本生成：无法识别 JSON"); st.code(content); return None
+            st.warning("⚠️ 剧本生成：无法识别 JSON，请重试"); st.code(content); return None
             
     except Exception as e:
         st.error(f"剧本生成错误: {e}")
@@ -258,7 +271,7 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
     elif not api_key:
         st.error("❌ 缺少 API Key")
     else:
-        # 完整的 Prompt 拼接
+        # 完整的 Prompt 拼接 (原汁原味)
         user_prompt = f"""
         # User Input Data (7 Dimensions):
         1. 真面目 (Mask): {input_mask}
@@ -286,7 +299,7 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
                     st.session_state['podcast_file'] = None
                     st.rerun()
                 else:
-                    st.error("❌ JSON 解析失败"); st.caption("原始返回如下："); st.code(content)
+                    st.error("❌ JSON 解析失败，DeepSeek 可能输出了无效格式"); st.caption("原始返回如下："); st.code(content)
 
             except Exception as e:
                 st.error(f"API Error: {e}")
@@ -341,7 +354,7 @@ if st.session_state['analysis_result']:
                                 voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
                                 header = {"Authorization": f"Bearer; {TOKEN}"}
                                 
-                                # 🔥🔥🔥 关键修复：补回了 reqid
+                                # 🔥🔥🔥 关键修复：补回了 reqid，这是火山引擎必须的！
                                 req_json = {
                                     "app": {"appid": APPID, "token": "access_token", "cluster": CLUSTER},
                                     "user": {"uid": "user_1"},
@@ -352,7 +365,7 @@ if st.session_state['analysis_result']:
                                         "volume_ratio": 1.0, "pitch_ratio": 1.0
                                     },
                                     "request": {
-                                        "reqid": str(uuid.uuid4()),  # ✅ 身份证号在这儿！
+                                        "reqid": str(uuid.uuid4()),  # ✅ 缺的身份证在这里！
                                         "text": item["text"], 
                                         "text_type": "plain", 
                                         "operation": "query", 
