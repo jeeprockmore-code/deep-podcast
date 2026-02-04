@@ -400,12 +400,27 @@ if 'analysis_result' not in st.session_state:
 if 'podcast_file' not in st.session_state:
     st.session_state['podcast_file'] = None
 
+# ==========================================
+# 👇 专为你定制的“记忆版”逻辑 (保留了所有优化)
+# ==========================================
+
+# 1. 初始化状态 (防止刷新后数据丢失)
+if 'analysis_result' not in st.session_state:
+    st.session_state['analysis_result'] = None
+if 'podcast_file' not in st.session_state:
+    st.session_state['podcast_file'] = None
+
+# ==========================================
+# 🚀 阶段一：分析生成 (点击后存入状态并刷新)
+# ==========================================
 if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
+    # 1. 检查输入完整性
     if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
         st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
         st.error("缺少启动密钥 (API Key)。请在侧边栏输入。")
     else:
+        # 2. 准备提示词
         user_prompt = f"""
         # User Input Data (7 Dimensions):
         1. 真面目 (Mask): {input_mask}
@@ -417,12 +432,13 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
         7. 死循环 (Loop): {input_loop}
         """
         
+        # 3. 调用 DeepSeek (保留了你用的 deepseek-reasoner)
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         
         with st.spinner("正在潜入你的潜意识深处... DeepSeek V3.2 思考中..."):
             try:
                 response = client.chat.completions.create(
-                    model="deepseek-reasoner",
+                    model="deepseek-reasoner", # <--- 保留了你的模型选择
                     messages=[
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": user_prompt}
@@ -432,12 +448,13 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
                 
                 content = response.choices[0].message.content
                 
-                # Cleanup markdown
+                # 4. 清洗 Markdown (保留了你的清洗逻辑)
                 if content.startswith("```json"):
                     content = content.replace("```json", "").replace("```", "")
                 elif content.startswith("```"):
                      content = content.replace("```", "")
                 
+                # 5. 提取 JSON
                 start_index = content.find('{')
                 end_index = content.rfind('}')
                 
@@ -445,8 +462,11 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
                     json_str = content[start_index:end_index+1]
                     try:
                         data = json.loads(json_str)
-                        st.session_state['analysis_result'] = data  # Save to state
-                        st.session_state['podcast_file'] = None     # Reset podcast
+                        
+                        # 【关键动作】存入 Session State，而不是直接打印
+                        st.session_state['analysis_result'] = data 
+                        st.session_state['podcast_file'] = None #以此重置旧的音频
+                        st.rerun() # <--- 强制刷新，进入阶段二
                         
                     except json.JSONDecodeError as e:
                         st.error("JSON 解析失败，精神错乱中...")
@@ -458,11 +478,13 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
             except Exception as e:
                 st.error(f"发生未知错误: {str(e)}")
 
-# Render if we have results in state
+# ==========================================
+# 🎨 阶段二：结果展示 & 播客生成 (只要有结果就一直显示)
+# ==========================================
 if st.session_state['analysis_result']:
     data = st.session_state['analysis_result']
     
-    # Handle nested coordinates safely
+    # 1. 渲染漂亮的卡片 (完全保留了你的 HTML/CSS 逻辑)
     coords = data.get("coordinates", {})
     if isinstance(coords, str): 
         coord_text = coords
@@ -487,35 +509,37 @@ if st.session_state['analysis_result']:
         </div>
         """, unsafe_allow_html=True)
 
-    # --- Podcast Section ---
+    # 2. 播客生成区域
     st.divider()
     st.header("🎧 深夜解剖室 (Podcast)")
     st.caption("太扎心了不敢看？不如戴上耳机，听听另外两个人在背后怎么议论你。")
 
-    # If podcast file doesn't exist yet, show generate button
+    # 如果还没有生成过音频，显示按钮
     if st.session_state['podcast_file'] is None:
         if st.button("生成我的专属播客 (Generate Podcast)"):
             with st.spinner("正在录制节目... (火山引擎合成中)"):
-                # 1. Generate Script
+                # A. 生成剧本
+                # 注意：这里调用你需要确认你的 generate_podcast_script 函数定义正常
                 script = generate_podcast_script(json.dumps(data, ensure_ascii=False), api_key)
                 
+                # === 🛡️ 你的防呆补丁 (完美保留) ===
                 if script:
-                    # === 🛡️ 新增的防呆补丁 ===
                     if isinstance(script, str):
                         st.warning("DeepSeek 生成格式有误，正在自动修正...")
                         script = [] 
-                    # ========================
+                # ==================================
 
-                    # 2. Generate Audio (Volcano Batch)
+                    # B. 合成音频
                     audio_file = "podcast_output.mp3"
                     
+                    # 调用你的批量合成函数
                     generate_podcast_volcano_batch(script, audio_file)
                     
                     if os.path.exists(audio_file):
                         st.session_state['podcast_file'] = audio_file
-                        st.rerun()
+                        st.rerun() # 生成完刷新页面，显示播放器
 
-    # If podcast file exists, show audio player
+    # 3. 如果音频存在，显示播放器
     if st.session_state['podcast_file']:
         st.success("节目录制完成！(Powered by Volcano TTS)")
         st.audio(st.session_state['podcast_file'], format="audio/mp3")
