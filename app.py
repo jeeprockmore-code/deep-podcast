@@ -287,9 +287,8 @@ if st.session_state['analysis_result']:
                             full_audio = b""
                             progress_bar = st.progress(0)
                             
-                            # ... (你的 for 循环头还在) ...
                             for i, item in enumerate(items):
-                                # 1. 准备参数 (保持不变)
+                                # 1. 准备参数
                                 voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
                                 header = {"Authorization": f"Bearer; {TOKEN}"}
                                 req_json = {
@@ -304,20 +303,27 @@ if st.session_state['analysis_result']:
                                     "request": {"text": item["text"], "text_type": "plain", "operation": "query", "with_frontend": 1, "frontend_type": "unitTson"}
                                 }
                                 
-                                # 2. 发送请求 (这一行是本来就有的)
-                                # 确保 URL 是 clean_url 或者直接写死字符串，不要带 markdown
+                                # 2. 发送请求 (干净的 URL)
                                 resp = requests.post("https://openspeech.bytedance.com/api/v1/tts", json=req_json, headers=header)
+                                resp_data = resp.json()
                                 
-                                # =========== 👇 重点修改这里 👇 ===========
-                                resp_data = resp.json() # 先把结果拿出来
-                                
+                                # 3. 🔥 错误侦测：如果失败，直接把原因打印到屏幕上！
                                 if "data" in resp_data:
-                                    # 成功：拼接到音频里
                                     full_audio += base64.b64decode(resp_data["data"])
                                 else:
-                                    # 失败：❌ 这一次必须打印出来！
-                                    st.error(f"第 {i+1} 句合成失败！火山引擎说：{resp_data}")
-                                # ========================================
+                                    st.error(f"⚠️ 第 {i+1} 句合成失败！火山引擎返回：{resp_data}")
                                 
                                 progress_bar.progress((i+1)/len(items))
+                            
+                            # 4. 保存音频
+                            if len(full_audio) > 0:
+                                with open("podcast.mp3", "wb") as f: f.write(full_audio)
+                                st.session_state['podcast_file'] = "podcast.mp3"; st.rerun()
+                            else:
+                                st.error("❌ 所有音频片段均合成失败，请检查上方红框里的错误信息！")
+                                
+                        except Exception as e: 
+                            st.error(f"合成程序崩溃: {e}") # 👈 刚才缺的就是这一块！
+                else: 
+                    st.warning("剧本为空或解析失败")
 
