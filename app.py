@@ -80,10 +80,12 @@ with st.sidebar:
     
     # Try to load from env if not provided
     if not api_key:
-        api_key = os.getenv("DEEPSEEK_API_KEY")
-        if api_key:
-            st.success("API Key loaded from environment.")
-
+        if "deepseek" in st.secrets:
+            api_key = st.secrets["deepseek"]["api_key"]
+            st.success("已自动加载云端密钥！")
+        elif os.getenv("DEEPSEEK_API_KEY"):
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+            
 # Main Header
 st.title("反矫情战略顾问")
 st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种不开心与想不开*")
@@ -517,6 +519,7 @@ if st.session_state['analysis_result']:
     if st.session_state['podcast_file']:
         st.success("节目录制完成！(Powered by Volcano TTS)")
         st.audio(st.session_state['podcast_file'], format="audio/mp3")
+
 
 
 
