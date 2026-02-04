@@ -285,43 +285,68 @@ def clean_and_parse_json(llm_output):
         ]
 
 def generate_podcast_script(analysis_json_str, api_key):
-        """Generates the podcast script using DeepSeek."""
-        # ✅ 新代码（复制这段替换掉原来的 client = ...）：
-        import os
-        from openai import OpenAI
-        import streamlit as st
-        
-        # 优先从 Streamlit Secrets 读取，如果没有则尝试环境变量
-        try:
-            if "deepseek" in st.secrets:
-                deepseek_api_key = st.secrets["deepseek"]["api_key"]
-            else:
-                # 本地兜底逻辑
-                deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
-        
-            # 初始化客户端
-            client = OpenAI(
-                api_key=deepseek_api_key,
-                base_url="https://api.deepseek.com"
-            )
-        except Exception as e:
-            st.error("❌ DeepSeek 客户端初始化失败，请检查 .streamlit/secrets.toml")
-            st.stop()
-            try:
-                response = client.chat.completions.create(
-                    model="deepseek-chat",
-                    messages=[
-                        {"role": "system", "content": PODCAST_PROMPT},
-                        {"role": "user", "content": analysis_json_str}
-                    ],
-                    stream=False
-                )
-                content = response.choices[0].message.content
-                return clean_and_parse_json(content)
-            except Exception as e:
-                st.error(f"Podcast Script Generation Failed: {e}")
-                return None
+    """Generates the podcast script using DeepSeek with robust debugging."""
+    import json
+    import re
+    import os
+    from openai import OpenAI
+    import streamlit as st
 
+    # 1. 初始化客户端
+    try:
+        # 优先用传入的 Key，其次 Secrets，最后环境变量
+        final_key = api_key
+        if not final_key and "deepseek" in st.secrets:
+            final_key = st.secrets["deepseek"]["api_key"]
+        if not final_key:
+            final_key = os.getenv("DEEPSEEK_API_KEY", "")
+            
+        client = OpenAI(
+            api_key=final_key,
+            base_url="https://api.deepseek.com"
+        )
+    except Exception as e:
+        st.error(f"DeepSeek Client Init Failed: {e}")
+        return None
+
+    # 2. 生成剧本
+    try:
+        response = client.chat.completions.create(
+            model="deepseek-chat", 
+            messages=[
+                {"role": "system", "content": PODCAST_PROMPT},
+                {"role": "user", "content": analysis_json_str}
+            ],
+            stream=False,
+            temperature=1.3 
+        )
+        content = response.choices[0].message.content
+        
+        # --- 🛡️ 强力清洗逻辑 (不依赖外部函数) ---
+        # 移除 markdown 标记
+        content_clean = re.sub(r"```json|```", "", content).strip()
+        
+        # 寻找 JSON 的 { } 范围
+        start = content_clean.find("{")
+        end = content_clean.rfind("}")
+        
+        if start != -1 and end != -1:
+            json_str = content_clean[start:end+1]
+            return json.loads(json_str)
+        else:
+            # 🚨 关键：如果解析失败，直接把 DeepSeek 原话打印出来！
+            st.warning("⚠️ DeepSeek 返回了非 JSON 格式，请截图下面这段文字发给我：")
+            st.code(content) 
+            return None
+            
+    except json.JSONDecodeError as e:
+        st.error("❌ JSON 解析失败")
+        st.caption("DeepSeek 的原始回复如下，请截图发给我：")
+        st.code(content) # <--- 让我们看清它到底回了什么
+        return None
+    except Exception as e:
+        st.error(f"生成过程发生未知错误: {e}")
+        return None
 def synthesize_volcano(text, voice_type, output_file):
     """Synthesizes one segment using Volcano TTS API."""
     url = "https://openspeech.bytedance.com/api/v1/tts"
@@ -608,6 +633,7 @@ if st.session_state['analysis_result']:
         if st.button("🔄 重新生成播客"):
             st.session_state['podcast_file'] = None
             st.rerun()
+
 
 
 
