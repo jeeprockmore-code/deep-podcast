@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import json
 import requests
-import uuid
+import uuid  # ✅ 必须用到这个库生成身份证号
 import base64
 import re
 import ast
@@ -36,15 +36,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 特调参数区 (音色已确认)
+# 2. 特调参数区 (音色配置)
 # ==========================================
+# ⚠️ 注意：如果 BV700_V2 报错，请手动将下面这行改成 "BV004_streaming"
 VOICE_ID_FEMALE = "BV700_V2_streaming"  # 莎莎(毒舌版)
 VOICE_ID_MALE = "BV102_streaming"       # 阿强(憨厚版)
 CLUSTER = "volcano_tts"
 
 # 启动自检
 if "volcano" not in st.secrets:
-    st.warning("⚠️ 警告：Secrets 中未找到 [volcano] 配置，无法生成语音。")
+    st.error("🚨 严重错误：Secrets 中未找到 [volcano] 配置！请检查 .streamlit/secrets.toml")
 
 # ==========================================
 # 3. 侧边栏
@@ -65,107 +66,155 @@ st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种
 st.markdown("---")
 
 # ==========================================
-# 4. 七维扫描输入区 (完整版)
+# 4. 七维扫描输入区 (文案已恢复原版！一个字没少！)
 # ==========================================
 st.subheader("🕵️ 七维心理扫描 (Seven-Dimensional Scan)")
 col1, col2 = st.columns(2)
 
 with col1:
-    input_mask = st.text_area("**1. 【测真面目】**\n剥离社交滤镜后，我性格里真实、甚至阴暗的一面是：", placeholder="例：冷漠 / 精于算计 / 极度自私...", height=130)
-    input_jealousy = st.text_area("**2. 【测嫉妒心】**\n我特别看不惯 ______ 的人，但深夜觉得他们活得比我爽。", placeholder="例：那些不努力却运气好的人...", height=130)
-    input_image = st.text_area("**3. 【测精神图景】**\n把我的精神状态画成一幅画，画面里是：", placeholder="例：在悬崖边骑独轮车...", height=130)
-    input_loop = st.text_area("**4. 【测死循环】**\n我总是陷入死循环：每当 ______ 时，就忍不住 ______ 。", placeholder="例：压力大时暴食，事后又后悔...", height=130)
+    input_mask = st.text_area(
+        label="**1. 【测真面目】**\n如果把社交场合的‘滤镜’关掉，我很清楚，我性格里真实、甚至有点阴暗的那一面其实是：",
+        placeholder="比如：冷漠 / 精于算计 / 软弱 / 极度自私...",
+        height=130
+    )
+    input_jealousy = st.text_area(
+        label="**2. 【测嫉妒心】**\n我特别看不惯那些 ______ 的人，但深夜时我隐约觉得，他们活得比我爽。",
+        placeholder="比如：那些自私却被宠爱的人 / 那些不努力却运气好的人...",
+        height=130
+    )
+    input_image = st.text_area(
+        label="**3. 【测精神图景】**\n如果把我的精神状态画成一幅画，画面里是：",
+        placeholder="比如：在悬崖边骑独轮车 / 一个人在深海里溺水...",
+        height=130
+    )
+    input_loop = st.text_area(
+        label="**4. 【测死循环】**\n我总是陷入一个死循环：每当 ______ 时，我就会忍不住去 ______ ，事后又后悔。",
+        placeholder="比如：每当压力大时，就忍不住暴食；每当要工作时，就忍不住刷手机...",
+        height=130
+    )
 
 with col2:
-    input_payoff = st.text_area("**5. 【测隐性红利】**\n如果立刻改变，我就不得不失去 ______ 的‘特权’。", placeholder="例：不用承担养家的责任 / 可以继续当受害者...", height=130)
-    input_enemy = st.text_area("**6. 【测紧箍咒】**\n脑子里有个声音指责说：‘你如果不 ______ ，你就是废物。’", placeholder="例：如果不年入百万 / 如果不讨好所有人...", height=130)
-    input_sacrifice = st.text_area("**7. 【测牺牲品】**\n为了维持和平，我正在亲手扼杀掉那个 ______ 的自己。", placeholder="例：想去流浪的自己 / 有攻击性的自己...", height=130)
+    input_payoff = st.text_area(
+        label="**5. 【测隐性红利】**\n虽然现状让我痛苦，但如果我现在立刻改变，我就不得不失去 ______ 的‘特权’。",
+        placeholder="比如：不用承担养家的责任 / 可以继续理直气壮地当受害者...",
+        height=130
+    )
+    input_enemy = st.text_area(
+        label="**6. 【测紧箍咒】**\n当我想要做自己时，脑子里总有个严厉的声音指责说：‘你如果不 ______ ，你就是个废物。’",
+        placeholder="比如：如果不年入百万 / 如果不讨好所有人...",
+        height=130
+    )
+    input_sacrifice = st.text_area(
+        label="**7. 【测牺牲品】**\n为了让那个严厉的声音闭嘴，为了维持表面的和平，我正在亲手扼杀掉那个 ______ 的自己。",
+        placeholder="比如：想去流浪的自己 / 有攻击性的自己...",
+        height=130
+    )
 
 # ==========================================
-# 5. Prompts (完整结构化版)
+# 5. Prompts (完整结构化版，未删减)
 # ==========================================
 SYSTEM_PROMPT = """
 # Role:
-你是一位“反矫情”的心理战略顾问。不是心理医生，是看透人性的鬼才导演。
+你是一位**“反矫情”的心理战略顾问**。你不是心理医生，你是一个看透人性的鬼才导演。你的任务是把用户的人生剧本拿来，指出哪段戏演砸了，哪句台词是撒谎。
+
 # Input Data (七维扫描):
-1. 真面目 2. 嫉妒心 3. 图景 4. 红利 5. 紧箍咒 6. 牺牲品 7. 死循环
-# Style:
-1. Length: 每板块 150+ 字，丰满。
-2. Tone: 毒舌、反讽、黑色幽默、骂醒用户。
-3. Logic: 串联成完整的侦探故事。
-# Output (JSON Only):
+1. 真面目: 用户隐藏的阴暗面。
+2. 嫉妒心: 用户的投射（渴望成为的样子）。
+3. 图景: 精神状态的画面。
+4. 红利: 维持现状的隐秘好处（次级获益）。
+5. 紧箍咒: 内在的超我/批判声音。
+6. 牺牲品: 被压抑的本我/生命力。
+7. 死循环: 用户的惯性行为模式。
+
+# Style Constraints (风格绝对约束):
+1. **Length & Depth:** 这一版分析必须**丰满**。每个板块至少输出 **150-200字**。禁止三言两语打发用户。
+2. **Vivid & Spicy:** 使用大量的比喻、反讽和黑色幽默。不要说教，要“骂醒”。
+3. **Logical Flow:** 将 7 个输入串联成一个完整的侦探故事，不要割裂地分析。
+
+# Workflow (输出结构):
+
+### 1. 撕面具 (The Unmasking)
+* **核心逻辑：** 串联 [真面目] + [红利] + [死循环]。
+* **深度话术：** “你以为你 [真面目] 是因为性格缺陷？不，这是你为了保住 [红利] 而精心设计的策略。看看你的 [死循环]，那就是你为了逃避成长而一遍遍上演的‘安抚奶嘴’行为。你不是改不掉，你是舍不得改。”
+* **要求：** 揭露“受害者心态”背后的**利益交换**。
+
+### 2. 破投射 (Shadow Integration)
+* **核心逻辑：** 解析 [嫉妒心] 与 [牺牲品] 的关系。
+* **深度话术：** “你看不惯 [嫉妒心] 的人，是因为他们替你活出了那个被你亲手扼杀的 [牺牲品]。你恨他们，是因为他们没有被你脑子里的 [紧箍咒] 吓死，而你跪下了。”
+
+### 3. 致命盲区 (The Glitch)
+* **核心逻辑：** 对 [图景] 进行降维打击。
+* **要求：** 指出这个画面里**最荒谬、最违反逻辑**的一点。证明恐惧是幻想出来的纸老虎。
+
+### 4. 你的坐标系 (The Coordinates)
+* **痛苦颗粒度：** 极高/中等/麻木。
+* **心理画像：** 给出一个**极具画面感、讽刺性**的角色定义。（例如：在泰坦尼克号上忙着擦甲板的完美主义者）。
+
+### 5. 灵魂炼金术 (The Sublimation)
+* **核心指令：** **商业价值重估 (Business Model Canvas for the Soul)。**
+* **深度话术：** “听着，别去改你的 [真面目] 和 [嫉妒心]。把它们当成你的资产配置。你的 [真面目] 其实是你的【核心竞争力】，你的 [嫉妒心] 其实是你的【市场风向标】。在对抗 [紧箍咒] 的战斗中，你要这样使用它们...”
+* **要求：** 给出**极具建设性**的战略建议，而不只是鸡汤。
+
+### 6. 一分钟微行动 (The Kick)
+* **核心指令：** 设计一个**反直觉、打破 [死循环]** 的 10秒物理动作。
+* **规则：** 必须怪诞、有趣、物理化。不要仅仅是深呼吸。
+
+# Output Format (JSON Only):
+请务必返回一个合法的 JSON 对象。不要包含 markdown 代码块标记，只返回纯文本的 JSON 字符串。
+Key 结构如下：
 {
-  "unmasking": "...", "shadow_integration": "...", "blind_spot": "...",
+  "unmasking": "...",
+  "shadow_integration": "...",
+  "blind_spot": "...",
   "coordinates": { "pain_level": "...", "profile": "..." },
-  "sublimation": "...", "micro_action": "..."
+  "sublimation": "...",
+  "micro_action": "..."
 }
 """
 
 PODCAST_PROMPT = """
 # Role:
-《深夜解剖室》制作人。将分析报告改编成极其生活化的男女闲聊。
+你是《深夜解剖室》的制作人。请将分析报告改编成一段**极其生活化、甚至琐碎**的男女闲聊。
+
 # Characters:
-1. 阿强(男): 捧哏，反应慢。
-2. 莎莎(女): 毒舌，看透一切。
+1. 阿强(男): 好奇、反应慢半拍、捧哏。
+2. 莎莎(女): 毒舌、慵懒、看透一切。
+
 # Constraints:
-禁止翻译腔，像撸串聊天。
-# Output (JSON List):
+1. **禁止比喻:** 别说什么“走钢丝”、“安抚奶嘴”。直接说“吓得不敢动”、“就是为了偷懒”。
+2. **禁止翻译腔:** 像两个人在撸串时聊天。多用“哎”、“那个啥”、“你知道吧”。
+3. **结构:** 闲聊开场 -> 吐槽真面目 -> 揭穿借口 -> 给出那个“狡猾”的建议。
+
+# Output JSON:
 [{"role": "Male", "text": "..."}, {"role": "Female", "text": "..."}]
 """
 
 # ==========================================
-# 6. 核心工具：强力 JSON 解析器 (关键修复点!)
+# 6. 核心工具：强力 JSON 解析器
 # ==========================================
 def parse_json_robust(content):
-    """
-    专治 DeepSeek 各种不规范 JSON 返回。
-    1. 去除 Markdown 符号
-    2. 允许字符串内换行 (strict=False)
-    3. 兼容单引号和布尔值差异
-    """
-    if not content:
-        return None
-        
-    # 1. 移除 Markdown 代码块标记
+    if not content: return None
     clean_content = re.sub(r"```json|```", "", content).strip()
-    
-    # 2. 寻找 JSON 的核心部分 { ... } 或 [ ... ]
     first_brace = clean_content.find("{")
     first_bracket = clean_content.find("[")
-    
     start = -1
-    # 找最早出现的起始符
-    if first_brace != -1 and first_bracket != -1:
-        start = min(first_brace, first_bracket)
-    elif first_brace != -1:
-        start = first_brace
-    elif first_bracket != -1:
-        start = first_bracket
-        
-    if start == -1:
-        return None
-        
-    # 找最后的结束符
+    if first_brace != -1 and first_bracket != -1: start = min(first_brace, first_bracket)
+    elif first_brace != -1: start = first_brace
+    elif first_bracket != -1: start = first_bracket
+    if start == -1: return None
     end = max(clean_content.rfind("}"), clean_content.rfind("]"))
-    if end == -1:
-        return None
-        
+    if end == -1: return None
     json_str = clean_content[start:end+1]
-    
-    # 3. 尝试标准解析 (开启 strict=False 以允许换行符!)
     try:
         return json.loads(json_str, strict=False)
-    except json.JSONDecodeError:
-        # 4. 如果失败，尝试修正布尔值并用 AST 解析 (兜底方案)
+    except:
         try:
-            # 将 JSON 的 true/false/null 替换为 Python 的 True/False/None
             fixed_str = json_str.replace("true", "True").replace("false", "False").replace("null", "None")
             return ast.literal_eval(fixed_str)
         except:
             return None
 
 def generate_podcast_script(analysis_json_str, api_key):
-    """DeepSeek Chat + Robust Parsing."""
     try:
         final_key = api_key
         if not final_key and "deepseek" in st.secrets:
@@ -183,8 +232,6 @@ def generate_podcast_script(analysis_json_str, api_key):
             temperature=1.3 
         )
         content = response.choices[0].message.content
-        
-        # 使用强力解析器
         data = parse_json_robust(content)
         
         if data:
@@ -203,23 +250,24 @@ def generate_podcast_script(analysis_json_str, api_key):
 if 'analysis_result' not in st.session_state: st.session_state['analysis_result'] = None
 if 'podcast_file' not in st.session_state: st.session_state['podcast_file'] = None
 
-# --- 按钮 1: 深度分析 (DeepSeek Reasoner) ---
+# --- 按钮 1: 深度分析 ---
 if st.button("开始降维打击 (Generate)", key="btn_gen"):
-    if not (input_mask and input_jealousy and input_image):
-        st.warning("请至少填满前三个核心空洞，否则 DeepSeek 无法下嘴。")
+    # 检查输入完整性 (保留你的变量名)
+    if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
+        st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
         st.error("❌ 缺少 API Key")
     else:
-        # 完整的结构化 Prompt
+        # 完整的 Prompt 拼接
         user_prompt = f"""
-        # User Input Data:
-        1. 真面目: {input_mask}
-        2. 嫉妒心: {input_jealousy}
-        3. 图景: {input_image}
-        4. 红利: {input_payoff}
-        5. 紧箍咒: {input_enemy}
-        6. 牺牲品: {input_sacrifice}
-        7. 死循环: {input_loop}
+        # User Input Data (7 Dimensions):
+        1. 真面目 (Mask): {input_mask}
+        2. 嫉妒心 (Jealousy): {input_jealousy}
+        3. 图景 (Image): {input_image}
+        4. 红利 (Payoff): {input_payoff}
+        5. 紧箍咒 (Enemy): {input_enemy}
+        6. 牺牲品 (Sacrifice): {input_sacrifice}
+        7. 死循环 (Loop): {input_loop}
         """
         
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
@@ -231,16 +279,14 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
                     stream=False
                 )
                 content = response.choices[0].message.content
-                
-                # 🔥 使用强力解析器处理分析结果
                 parsed_data = parse_json_robust(content)
                 
                 if parsed_data:
                     st.session_state['analysis_result'] = parsed_data
-                    st.session_state['podcast_file'] = None # 重置音频
+                    st.session_state['podcast_file'] = None
                     st.rerun()
                 else:
-                    st.error("❌ JSON 解析失败"); st.caption("原始返回如下，可能是格式太乱："); st.code(content)
+                    st.error("❌ JSON 解析失败"); st.caption("原始返回如下："); st.code(content)
 
             except Exception as e:
                 st.error(f"API Error: {e}")
@@ -252,9 +298,12 @@ if st.session_state['analysis_result']:
     coord_text = coords if isinstance(coords, str) else f"**痛苦颗粒度:** {coords.get('pain_level','N/A')}<br>**心理画像:** {coords.get('profile','N/A')}"
 
     cards = [
-        ("🤡 撕面具", data.get("unmasking", "")), ("🌑 破投射", data.get("shadow_integration", "")),
-        ("🙈 致命盲区", data.get("blind_spot", "")), ("📍 精神坐标", coord_text),
-        ("⚗️ 灵魂炼金术", data.get("sublimation", "")), ("⚡ 一分钟微行动", data.get("micro_action", ""))
+        ("🤡 撕面具 | THE UNMASKING", data.get("unmasking", "")), 
+        ("🌑 破投射 | SHADOW INTEGRATION", data.get("shadow_integration", "")),
+        ("🙈 致命盲区 | THE GLITCH", data.get("blind_spot", "")), 
+        ("📍 精神坐标 | THE COORDINATES", coord_text),
+        ("⚗️ 灵魂炼金术 | THE SUBLIMATION", data.get("sublimation", "")), 
+        ("⚡ 一分钟微行动 | THE KICK", data.get("micro_action", ""))
     ]
     st.markdown("### 🔍 深度分析报告")
     for t, txt in cards:
@@ -270,7 +319,7 @@ if st.session_state['analysis_result']:
         # --- 按钮 2: 生成播客 (TTS) ---
         if st.button("生成我的专属播客 (Generate Podcast)"):
             if "volcano" not in st.secrets:
-                st.error("❌ 缺少火山引擎配置")
+                st.error("❌ 严重错误：未配置火山引擎 Secrets！")
             else:
                 APPID = st.secrets["volcano"]["appid"]
                 TOKEN = st.secrets["volcano"]["token"]
@@ -286,11 +335,13 @@ if st.session_state['analysis_result']:
                         try:
                             full_audio = b""
                             progress_bar = st.progress(0)
+                            error_count = 0
                             
                             for i, item in enumerate(items):
-                                # 1. 准备参数
                                 voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
                                 header = {"Authorization": f"Bearer; {TOKEN}"}
+                                
+                                # 🔥🔥🔥 关键修复：补回了 reqid
                                 req_json = {
                                     "app": {"appid": APPID, "token": "access_token", "cluster": CLUSTER},
                                     "user": {"uid": "user_1"},
@@ -300,30 +351,35 @@ if st.session_state['analysis_result']:
                                         "speed_ratio": 1.2,
                                         "volume_ratio": 1.0, "pitch_ratio": 1.0
                                     },
-                                    "request": {"text": item["text"], "text_type": "plain", "operation": "query", "with_frontend": 1, "frontend_type": "unitTson"}
+                                    "request": {
+                                        "reqid": str(uuid.uuid4()),  # ✅ 身份证号在这儿！
+                                        "text": item["text"], 
+                                        "text_type": "plain", 
+                                        "operation": "query", 
+                                        "with_frontend": 1, 
+                                        "frontend_type": "unitTson"
+                                    }
                                 }
                                 
-                                # 2. 发送请求 (干净的 URL)
-                                resp = requests.post("https://openspeech.bytedance.com/api/v1/tts", json=req_json, headers=header)
+                                # 发送请求
+                                resp = requests.post(VOLCANO_URL, json=req_json, headers=header)
                                 resp_data = resp.json()
                                 
-                                # 3. 🔥 错误侦测：如果失败，直接把原因打印到屏幕上！
                                 if "data" in resp_data:
                                     full_audio += base64.b64decode(resp_data["data"])
                                 else:
+                                    error_count += 1
                                     st.error(f"⚠️ 第 {i+1} 句合成失败！火山引擎返回：{resp_data}")
                                 
                                 progress_bar.progress((i+1)/len(items))
                             
-                            # 4. 保存音频
                             if len(full_audio) > 0:
                                 with open("podcast.mp3", "wb") as f: f.write(full_audio)
                                 st.session_state['podcast_file'] = "podcast.mp3"; st.rerun()
                             else:
-                                st.error("❌ 所有音频片段均合成失败，请检查上方红框里的错误信息！")
+                                st.error("❌ 音频合成失败，请查看上方的报错信息。")
                                 
                         except Exception as e: 
-                            st.error(f"合成程序崩溃: {e}") # 👈 刚才缺的就是这一块！
+                            st.error(f"合成程序崩溃: {e}")
                 else: 
                     st.warning("剧本为空或解析失败")
-
