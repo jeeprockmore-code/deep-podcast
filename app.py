@@ -285,7 +285,7 @@ def clean_and_parse_json(llm_output):
         ]
 
 def generate_podcast_script(analysis_json_str, api_key):
-    """Generates the podcast script using DeepSeek with robust debugging."""
+    """Generates the podcast script using DeepSeek with list/object compatibility."""
     import json
     import re
     import os
@@ -294,17 +294,13 @@ def generate_podcast_script(analysis_json_str, api_key):
 
     # 1. 初始化客户端
     try:
-        # 优先用传入的 Key，其次 Secrets，最后环境变量
         final_key = api_key
         if not final_key and "deepseek" in st.secrets:
             final_key = st.secrets["deepseek"]["api_key"]
         if not final_key:
             final_key = os.getenv("DEEPSEEK_API_KEY", "")
             
-        client = OpenAI(
-            api_key=final_key,
-            base_url="https://api.deepseek.com"
-        )
+        client = OpenAI(api_key=final_key, base_url="https://api.deepseek.com")
     except Exception as e:
         st.error(f"DeepSeek Client Init Failed: {e}")
         return None
@@ -322,27 +318,43 @@ def generate_podcast_script(analysis_json_str, api_key):
         )
         content = response.choices[0].message.content
         
-        # --- 🛡️ 强力清洗逻辑 (不依赖外部函数) ---
+        # --- 🛡️ 万能清洗逻辑 (修正版) ---
         # 移除 markdown 标记
         content_clean = re.sub(r"```json|```", "", content).strip()
         
-        # 寻找 JSON 的 { } 范围
-        start = content_clean.find("{")
-        end = content_clean.rfind("}")
+        # 关键修正：同时寻找 [ 和 {
+        # 找到第一个出现的 [ 或 {
+        first_bracket = content_clean.find("[")
+        first_brace = content_clean.find("{")
+        
+        start = -1
+        if first_bracket != -1 and first_brace != -1:
+            start = min(first_bracket, first_brace)
+        elif first_bracket != -1:
+            start = first_bracket
+        elif first_brace != -1:
+            start = first_brace
+            
+        end = max(content_clean.rfind("]"), content_clean.rfind("}"))
         
         if start != -1 and end != -1:
             json_str = content_clean[start:end+1]
-            return json.loads(json_str)
+            data = json.loads(json_str)
+            
+            # 🚨 兼容性补丁：如果 DeepSeek 返回的是列表 [...]，我们手动把它包装成字典
+            if isinstance(data, list):
+                return {"podcast": data}
+            else:
+                return data
         else:
-            # 🚨 关键：如果解析失败，直接把 DeepSeek 原话打印出来！
-            st.warning("⚠️ DeepSeek 返回了非 JSON 格式，请截图下面这段文字发给我：")
-            st.code(content) 
+            st.warning("⚠️ 无法识别 JSON 结构，DeepSeek 返回原始内容如下：")
+            st.code(content)
             return None
             
     except json.JSONDecodeError as e:
         st.error("❌ JSON 解析失败")
-        st.caption("DeepSeek 的原始回复如下，请截图发给我：")
-        st.code(content) # <--- 让我们看清它到底回了什么
+        st.caption("DeepSeek 的原始回复如下：")
+        st.code(content) 
         return None
     except Exception as e:
         st.error(f"生成过程发生未知错误: {e}")
@@ -633,6 +645,7 @@ if st.session_state['analysis_result']:
         if st.button("🔄 重新生成播客"):
             st.session_state['podcast_file'] = None
             st.rerun()
+
 
 
 
