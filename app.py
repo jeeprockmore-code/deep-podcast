@@ -114,8 +114,56 @@ PODCAST_PROMPT = """
 """
 
 # ==========================================
-# 6. DeepSeek 调用函数 (含 AST 强力解析)
+# 6. 核心工具：强力 JSON 解析器 (关键修复点!)
 # ==========================================
+def parse_json_robust(content):
+    """
+    专治 DeepSeek 各种不规范 JSON 返回。
+    1. 去除 Markdown 符号
+    2. 允许字符串内换行 (strict=False)
+    3. 兼容单引号和布尔值差异
+    """
+    if not content:
+        return None
+        
+    # 1. 移除 Markdown 代码块标记
+    clean_content = re.sub(r"```json|```", "", content).strip()
+    
+    # 2. 寻找 JSON 的核心部分 { ... } 或 [ ... ]
+    first_brace = clean_content.find("{")
+    first_bracket = clean_content.find("[")
+    
+    start = -1
+    # 找最早出现的起始符
+    if first_brace != -1 and first_bracket != -1:
+        start = min(first_brace, first_bracket)
+    elif first_brace != -1:
+        start = first_brace
+    elif first_bracket != -1:
+        start = first_bracket
+        
+    if start == -1:
+        return None
+        
+    # 找最后的结束符
+    end = max(clean_content.rfind("}"), clean_content.rfind("]"))
+    if end == -1:
+        return None
+        
+    json_str = clean_content[start:end+1]
+    
+    # 3. 尝试标准解析 (开启 strict=False 以允许换行符!)
+    try:
+        return json.loads(json_str, strict=False)
+    except json.JSONDecodeError:
+        # 4. 如果失败，尝试修正布尔值并用 AST 解析 (兜底方案)
+        try:
+            # 将 JSON 的 true/false/null 替换为 Python 的 True/False/None
+            fixed_str = json_str.replace("true", "True").replace("false", "False").replace("null", "None")
+            return ast.literal_eval(fixed_str)
+        except:
+            return None
+
 def generate_podcast_script(analysis_json_str, api_key):
     """DeepSeek Chat + Robust Parsing."""
     try:
@@ -136,21 +184,15 @@ def generate_podcast_script(analysis_json_str, api_key):
         )
         content = response.choices[0].message.content
         
-        # 清洗 + 解析
-        content_clean = re.sub(r"```json|```", "", content).strip()
-        first_bracket = content_clean.find("[")
-        if first_bracket != -1:
-            end_bracket = content_clean.rfind("]")
-            json_str = content_clean[first_bracket:end_bracket+1]
-            try:
-                data = json.loads(json_str)
-            except:
-                try: data = ast.literal_eval(json_str) # AST 兜底
-                except: return None
-            
+        # 使用强力解析器
+        data = parse_json_robust(content)
+        
+        if data:
             if isinstance(data, list): return {"podcast": data}
             return data
-        return None
+        else:
+            st.warning("⚠️ 剧本生成：无法识别 JSON"); st.code(content); return None
+            
     except Exception as e:
         st.error(f"剧本生成错误: {e}")
         return None
@@ -168,7 +210,7 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
     elif not api_key:
         st.error("❌ 缺少 API Key")
     else:
-        # ✅ 【已找回】完整的结构化 Prompt 拼接，确保 AI 理解每个维度
+        # 完整的结构化 Prompt
         user_prompt = f"""
         # User Input Data:
         1. 真面目: {input_mask}
@@ -190,23 +232,16 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
                 )
                 content = response.choices[0].message.content
                 
-                # 清洗结果
-                clean_content = re.sub(r"```json|```", "", content).strip()
-                s = clean_content.find('{')
-                e = clean_content.rfind('}')
-                if s != -1 and e != -1:
-                    try:
-                        st.session_state['analysis_result'] = json.loads(clean_content[s:e+1])
-                        st.session_state['podcast_file'] = None # 重置音频
-                        st.rerun()
-                    except:
-                        # AST 兜底
-                        try:
-                            st.session_state['analysis_result'] = ast.literal_eval(clean_content[s:e+1])
-                            st.session_state['podcast_file'] = None; st.rerun()
-                        except: st.error("JSON 解析失败"); st.code(content)
+                # 🔥 使用强力解析器处理分析结果
+                parsed_data = parse_json_robust(content)
+                
+                if parsed_data:
+                    st.session_state['analysis_result'] = parsed_data
+                    st.session_state['podcast_file'] = None # 重置音频
+                    st.rerun()
                 else:
-                    st.error("AI 未返回 JSON"); st.text(content)
+                    st.error("❌ JSON 解析失败"); st.caption("原始返回如下，可能是格式太乱："); st.code(content)
+
             except Exception as e:
                 st.error(f"API Error: {e}")
 
@@ -239,7 +274,7 @@ if st.session_state['analysis_result']:
             else:
                 APPID = st.secrets["volcano"]["appid"]
                 TOKEN = st.secrets["volcano"]["token"]
-                VOLCANO_URL = "https://openspeech.bytedance.com/api/v1/tts" # ✅ 干净 URL
+                VOLCANO_URL = "https://openspeech.bytedance.com/api/v1/tts" # 干净 URL
 
                 with st.spinner("✍️ DeepSeek 正在撰写剧本..."):
                     import json
@@ -253,7 +288,7 @@ if st.session_state['analysis_result']:
                             progress_bar = st.progress(0)
                             
                             for i, item in enumerate(items):
-                                # ✅ 使用特调音色 (莎莎/阿强)
+                                # 使用特调音色
                                 voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
                                 
                                 header = {"Authorization": f"Bearer; {TOKEN}"}
@@ -263,7 +298,7 @@ if st.session_state['analysis_result']:
                                     "audio": {
                                         "voice_type": voice,
                                         "encoding": "mp3",
-                                        "speed_ratio": 1.2, # ✅ 1.2倍速 (已找回)
+                                        "speed_ratio": 1.2, # 1.2倍速
                                         "volume_ratio": 1.0, "pitch_ratio": 1.0
                                     },
                                     "request": {"text": item["text"], "text_type": "plain", "operation": "query", "with_frontend": 1, "frontend_type": "unitTson"}
