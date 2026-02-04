@@ -8,7 +8,9 @@ import re
 import ast
 from openai import OpenAI
 
-# Page Config
+# ==========================================
+# 1. 页面配置 & CSS (保留了你的极简黑白风)
+# ==========================================
 st.set_page_config(
     page_title="反矫情战略顾问",
     page_icon="🖤",
@@ -16,7 +18,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for Minimalist Black & White Theme
 st.markdown("""
 <style>
     /* Global Styles */
@@ -54,7 +55,7 @@ st.markdown("""
         font-weight: 900;
     }
     
-    /* Custom Cards */
+    /* Custom Cards (保留了你的卡片样式) */
     .psych-card {
         border: 2px solid #000000;
         padding: 20px;
@@ -73,12 +74,14 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Sidebar Configuration
+# ==========================================
+# 2. 侧边栏 & 密钥配置
+# ==========================================
 with st.sidebar:
     st.header("⚙️ Configuration")
     api_key = st.text_input("DeepSeek API Key", type="password", help="Enter your DeepSeek API Key here.")
     
-    # Try to load from env if not provided
+    # 自动加载逻辑
     if not api_key:
         if "deepseek" in st.secrets:
             api_key = st.secrets["deepseek"]["api_key"]
@@ -91,7 +94,9 @@ st.title("反矫情战略顾问")
 st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种不开心与想不开*")
 st.markdown("---")
 
-# Input Section
+# ==========================================
+# 3. 输入区域 (七维扫描)
+# ==========================================
 st.subheader("🕵️ 七维心理扫描 (Seven-Dimensional Scan)")
 col1, col2 = st.columns(2)
 
@@ -134,20 +139,21 @@ with col2:
         height=130
     )
 
-
-# System Prompt
+# ==========================================
+# 4. Prompts (保留了你的核心 Prompt)
+# ==========================================
 SYSTEM_PROMPT = """
 # Role:
 你是一位**“反矫情”的心理战略顾问**。你不是心理医生，你是一个看透人性的鬼才导演。你的任务是把用户的人生剧本拿来，指出哪段戏演砸了，哪句台词是撒谎。
 
 # Input Data (七维扫描):
-1.  **真面目:** 用户隐藏的阴暗面。
-2.  **嫉妒心:** 用户的投射（渴望成为的样子）。
-3.  **图景:** 精神状态的画面。
-4.  **红利:** 维持现状的隐秘好处（次级获益）。
-5.  **紧箍咒:** 内在的超我/批判声音。
-6.  **牺牲品:** 被压抑的本我/生命力。
-7.  **死循环:** 用户的惯性行为模式。
+1.  真面目: 用户隐藏的阴暗面。
+2.  嫉妒心: 用户的投射（渴望成为的样子）。
+3.  图景: 精神状态的画面。
+4.  红利: 维持现状的隐秘好处（次级获益）。
+5.  紧箍咒: 内在的超我/批判声音。
+6.  牺牲品: 被压抑的本我/生命力。
+7.  死循环: 用户的惯性行为模式。
 
 # Style Constraints (风格绝对约束):
 1.  **Length & Depth:** 这一版分析必须**丰满**。每个板块至少输出 **150-200字**。禁止三言两语打发用户。
@@ -195,8 +201,6 @@ Key 结构如下：
 }
 """
 
-
-# Podcast Prompt V3.0
 PODCAST_PROMPT = """
 # Role:
 你是《深夜解剖室》的制作人。请将分析报告改编成一段**极其生活化、甚至琐碎**的男女闲聊。
@@ -215,75 +219,8 @@ PODCAST_PROMPT = """
 """
 
 # ==========================================
-# 安全配置：从 .streamlit/secrets.toml 读取密钥
+# 5. 核心功能函数 (DeepSeek + 清洗 + 兼容列表)
 # ==========================================
-try:
-    # 尝试从保险箱读取
-    if "volcano" in st.secrets:
-        VOLC_APPID = st.secrets["volcano"]["appid"]
-        VOLC_TOKEN = st.secrets["volcano"]["token"]
-    else:
-        # 如果没找到 [volcano] 板块
-        st.error("❌ 配置文件错误：在 secrets.toml 中未找到 [volcano] 部分。")
-        st.stop()
-except FileNotFoundError:
-    # 如果没找到 secrets.toml 文件
-    st.error("❌ 缺少密钥文件：请确保 .streamlit/secrets.toml 存在。")
-    st.stop()
-except Exception as e:
-    st.error(f"❌ 密钥读取失败: {e}")
-    st.stop()
-
-# ==========================================
-# 选角配置 (保持不变)
-# ==========================================
-VOICE_ID_FEMALE = "BV700_V2_streaming"  # 莎莎
-VOICE_ID_MALE = "BV102_streaming"       # 阿强
-CLUSTER = "volcano_tts"
-
-# Helper Functions
-def clean_and_parse_json(llm_output):
-    """
-    V2.0 强力清洗函数：
-    1. 暴力寻找最外层的 [...] 列表结构
-    2. 兼容单引号/双引号混用的情况
-    3. 自动修复常见的格式错误
-    """
-    try:
-        # 1. 预处理：去掉可能存在的 Markdown 标记 (```json ... ```)
-        text = re.sub(r'```(?:json)?', '', llm_output)
-        text = text.replace('```', '')
-        
-        # 2. 暴力提取：找到第一个 '[' 和最后一个 ']' 之间的内容
-        start_idx = text.find('[')
-        end_idx = text.rfind(']')
-        
-        if start_idx == -1 or end_idx == -1:
-            raise ValueError("No JSON list found in output")
-            
-        json_str = text[start_idx : end_idx + 1]
-        
-        # 3. 尝试标准 JSON 解析
-        return json.loads(json_str)
-        
-    except json.JSONDecodeError:
-        try:
-            # 4. 如果标准 JSON 失败（通常是因为 DeepSeek 用了单引号），尝试用 Python AST 解析
-            # 这能处理 {'role': 'Male'} 这种 Python 字典格式
-            return ast.literal_eval(json_str)
-        except:
-            # 5. 实在不行，打印出来让我们看看它到底写了啥
-            st.error(f"🔥 解析彻底失败，DeepSeek 的原始内容是:\n{llm_output}")
-            return [
-                {"role": "Male", "text": "莎莎，剧本好像被 DeepSeek 吃了。"},
-                {"role": "Female", "text": "哎，这届 AI 真难带。Johnny，你再点一次生成试试？"}
-            ]
-    except Exception as e:
-        st.error(f"🔥 未知错误: {e}")
-        return [
-            {"role": "Female", "text": "系统出 Bug 了，不过听到我的声音就说明咱们成功了一半！"}
-        ]
-
 def generate_podcast_script(analysis_json_str, api_key):
     """Generates the podcast script using DeepSeek with list/object compatibility."""
     import json
@@ -292,7 +229,7 @@ def generate_podcast_script(analysis_json_str, api_key):
     from openai import OpenAI
     import streamlit as st
 
-    # 1. 初始化客户端
+    # 初始化客户端
     try:
         final_key = api_key
         if not final_key and "deepseek" in st.secrets:
@@ -305,7 +242,7 @@ def generate_podcast_script(analysis_json_str, api_key):
         st.error(f"DeepSeek Client Init Failed: {e}")
         return None
 
-    # 2. 生成剧本
+    # 生成剧本
     try:
         response = client.chat.completions.create(
             model="deepseek-chat", 
@@ -318,12 +255,10 @@ def generate_podcast_script(analysis_json_str, api_key):
         )
         content = response.choices[0].message.content
         
-        # --- 🛡️ 万能清洗逻辑 (修正版) ---
-        # 移除 markdown 标记
+        # --- 万能清洗逻辑 ---
         content_clean = re.sub(r"```json|```", "", content).strip()
         
-        # 关键修正：同时寻找 [ 和 {
-        # 找到第一个出现的 [ 或 {
+        # 同时寻找 [ 和 {
         first_bracket = content_clean.find("[")
         first_brace = content_clean.find("{")
         
@@ -341,7 +276,7 @@ def generate_podcast_script(analysis_json_str, api_key):
             json_str = content_clean[start:end+1]
             data = json.loads(json_str)
             
-            # 🚨 兼容性补丁：如果 DeepSeek 返回的是列表 [...]，我们手动把它包装成字典
+            # 兼容性补丁：统一返回字典
             if isinstance(data, list):
                 return {"podcast": data}
             else:
@@ -359,118 +294,25 @@ def generate_podcast_script(analysis_json_str, api_key):
     except Exception as e:
         st.error(f"生成过程发生未知错误: {e}")
         return None
-def synthesize_volcano(text, voice_type, output_file):
-    """Synthesizes one segment using Volcano TTS API."""
-    url = "https://openspeech.bytedance.com/api/v1/tts"
-    header = {"Authorization": f"Bearer; {VOLC_TOKEN}"}
-    
-    req = {
-        "app": {"appid": VOLC_APPID, "token": "access_token", "cluster": CLUSTER},
-        "user": {"uid": "user_1"},
-        "audio": {
-            "voice_type": voice_type,
-            "encoding": "mp3",
-            "speed_ratio": 1.2,  # 1.2x Speed
-            "volume_ratio": 1.0,
-            "pitch_ratio": 1.0,
-        },
-        "request": {
-            "reqid": str(uuid.uuid4()),
-            "text": text,
-            "text_type": "plain",
-            "operation": "query",
-        }
-    }
-    
-    try:
-        resp = requests.post(url, json=req, headers=header)
-        if "data" in resp.json():
-            with open(output_file, "wb") as f:
-                f.write(base64.b64decode(resp.json()["data"]))
-            return True
-        else:
-            st.error(f"TTS Error: {resp.text}")
-            return False
-    except Exception as e:
-        st.error(f"Request Error: {e}")
-        return False
 
-def generate_podcast_volcano_batch(script_list, final_file):
-    """Generates and concatenates audio segments using Volcano TTS."""
-    segments = []
-    
-    try:
-        progress_bar = st.progress(0)
-        total_lines = len(script_list)
-        
-        for i, line in enumerate(script_list):
-            voice = VOICE_ID_MALE if line.get('role') == 'Male' else VOICE_ID_FEMALE
-            text = line.get('text', '')
-            temp_name = f"temp_{i}.mp3"
-            
-            if synthesize_volcano(text, voice, temp_name):
-                segments.append(temp_name)
-            
-            progress_bar.progress((i + 1) / total_lines)
-            
-        # Concatenate
-        with open(final_file, "wb") as outfile:
-            for seg in segments:
-                if os.path.exists(seg):
-                    with open(seg, "rb") as infile:
-                        outfile.write(infile.read())
-                    
-    except Exception as e:
-        st.error(f"Batch Generation Error: {e}")
-    finally:
-        # Cleanup
-        for seg in segments:
-            if os.path.exists(seg):
-                os.remove(seg)
-                
-    return True
+# ==========================================
+# 6. 主逻辑控制 (Session State + Reasoner)
+# ==========================================
 
-# Logic
-# 1. Init Session State
+# 初始化大脑记忆
 if 'analysis_result' not in st.session_state:
     st.session_state['analysis_result'] = None
 if 'podcast_file' not in st.session_state:
     st.session_state['podcast_file'] = None
 
-# ==========================================
-# 👇 专为你定制的“记忆版”逻辑 (保留了所有优化)
-# ==========================================
-
-# 1. 初始化状态 (防止刷新后数据丢失)
-if 'analysis_result' not in st.session_state:
-    st.session_state['analysis_result'] = None
-if 'podcast_file' not in st.session_state:
-    st.session_state['podcast_file'] = None
-
-# ==========================================
-# 🚀 阶段一：分析生成 (点击后存入状态并刷新)
-# ==========================================
-# ==========================================
-# 👇 最终融合版：保留了你的所有变量、Prompt 和 UI
-# ==========================================
-
-# 1. 初始化大脑记忆 (防止刷新丢失)
-if 'analysis_result' not in st.session_state:
-    st.session_state['analysis_result'] = None
-if 'podcast_file' not in st.session_state:
-    st.session_state['podcast_file'] = None
-
-# ==========================================
-# 🚀 阶段一：开始降维打击 (DeepSeek Reasoner)
-# ==========================================
+# --- 阶段一：开始降维打击 (DeepSeek Reasoner) ---
 if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
-    # A. 检查你的 7 个输入框 (完全保留你的变量名)
     if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
         st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
         st.error("❌ 缺少启动密钥 (API Key)。请在侧边栏输入。")
     else:
-        # B. 组装你的 Prompt (原汁原味)
+        # 组装 Prompt
         user_prompt = f"""
         # User Input Data (7 Dimensions):
         1. 真面目 (Mask): {input_mask}
@@ -482,12 +324,11 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
         7. 死循环 (Loop): {input_loop}
         """
         
-        # C. 调用 DeepSeek (保留 deepseek-reasoner)
+        # 调用 DeepSeek (DeepSeek Reasoner 保留！)
         client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
         
         with st.spinner("正在潜入你的潜意识深处... DeepSeek V3.2 思考中..."):
             try:
-                # 使用你指定的 System Prompt
                 response = client.chat.completions.create(
                     model="deepseek-reasoner",
                     messages=[
@@ -499,13 +340,13 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
                 
                 content = response.choices[0].message.content
                 
-                # D. 清洗 Markdown (你的防错逻辑)
+                # 清洗 Markdown
                 if content.startswith("```json"):
                     content = content.replace("```json", "").replace("```", "")
                 elif content.startswith("```"):
                      content = content.replace("```", "")
                 
-                # E. 提取 JSON
+                # 提取 JSON
                 start_index = content.find('{')
                 end_index = content.rfind('}')
                 
@@ -513,28 +354,24 @@ if st.button("开始降维打击 (Generate)", key="btn_generate_final"):
                     json_str = content[start_index:end_index+1]
                     try:
                         data = json.loads(json_str)
-                        # 【关键】存入记忆，并强制刷新页面 (解决按钮消失问题)
                         st.session_state['analysis_result'] = data
                         st.session_state['podcast_file'] = None 
                         st.rerun() 
-                        
-                    except json.JSONDecodeError as e:
-                        st.error("JSON 解析失败，精神错乱中...")
-                        st.text(f"Raw Content:\n{content}")
+                    except json.JSONDecodeError:
+                        st.error("JSON 解析失败")
+                        st.text(content)
                 else:
-                    st.error("未能找到有效的 JSON 结构。")
-                    st.text(f"Raw Content:\n{content}")
+                    st.error("未能找到有效的 JSON 结构")
+                    st.text(content)
                     
             except Exception as e:
                 st.error(f"发生未知错误: {str(e)}")
 
-# ==========================================
-# 🎨 阶段二：结果展示 & 播客生成 (记忆版)
-# ==========================================
+# --- 阶段二：结果展示 & 播客生成 ---
 if st.session_state['analysis_result']:
     data = st.session_state['analysis_result']
     
-    # 1. 渲染你的卡片 UI (完全保留)
+    # 显示卡片 (保留了你的 CSS 样式)
     coords = data.get("coordinates", {})
     if isinstance(coords, str): 
         coord_text = coords
@@ -559,36 +396,40 @@ if st.session_state['analysis_result']:
         </div>
         """, unsafe_allow_html=True)
 
-    # 2. 播客生成区域 (内联火山引擎，确保100%能用)
+    # 播客生成区域
     st.divider()
     st.header("🎧 深夜解剖室 (Podcast)")
     st.caption("太扎心了不敢看？不如戴上耳机，听听另外两个人在背后怎么议论你。")
 
-    # 如果还没生成音频，显示按钮
     if st.session_state['podcast_file'] is None:
         if st.button("生成我的专属播客 (Generate Podcast)"):
             
-            # 检查火山配置
             if "volcano" not in st.secrets:
                 st.error("❌ 缺少火山引擎配置！请检查 .streamlit/secrets.toml")
             else:
                 APPID = st.secrets["volcano"]["appid"]
                 TOKEN = st.secrets["volcano"]["token"]
                 CLUSTER = "volcano_tts"
+                
+                # ✅ 干净的 URL，修复了隐形字符问题
+                VOLCANO_URL = "[https://openspeech.bytedance.com/api/v1/tts](https://openspeech.bytedance.com/api/v1/tts)"
 
                 with st.spinner("✍️ 正在撰写剧本 (DeepSeek)..."):
                     import json
-                    # 生成剧本 (使用你定义的 generate_podcast_script 函数)
                     script_data = generate_podcast_script(json.dumps(data, ensure_ascii=False), api_key)
                     
-                    if not script_data or isinstance(script_data, str):
-                        st.warning("DeepSeek 返回格式异常，尝试强制修正...")
+                    if not script_data:
+                        st.error("剧本生成失败")
                         podcast_items = []
+                    elif isinstance(script_data, dict):
+                         podcast_items = script_data.get("podcast", [])
+                    elif isinstance(script_data, list):
+                         podcast_items = script_data
                     else:
-                        podcast_items = script_data.get("podcast", [])
+                         podcast_items = []
 
                 if podcast_items:
-                    with st.spinner(f"🎙️ 正在录制 {len(podcast_items)} 段对话 (火山引擎合成中)..."):
+                    with st.spinner(f"🎙️ 正在录制 {len(podcast_items)} 段对话..."):
                         try:
                             import requests
                             import base64
@@ -596,7 +437,6 @@ if st.session_state['analysis_result']:
                             full_audio_data = b""
                             progress_bar = st.progress(0)
                             
-                            # 循环合成 (内联逻辑，不依赖外部函数)
                             for i, item in enumerate(podcast_items):
                                 text = item["text"]
                                 role = item["role"]
@@ -617,14 +457,12 @@ if st.session_state['analysis_result']:
                                     }
                                 }
                                 
-                                resp = requests.post("[https://openspeech.bytedance.com/api/v1/tts](https://openspeech.bytedance.com/api/v1/tts)", json=request_json, headers=header)
+                                resp = requests.post(VOLCANO_URL, json=request_json, headers=header)
                                 
                                 if "data" in resp.json():
                                     full_audio_data += base64.b64decode(resp.json()["data"])
-                                
                                 progress_bar.progress((i + 1) / len(podcast_items))
                             
-                            # 保存并刷新
                             output_filename = "podcast_output.mp3"
                             with open(output_filename, "wb") as f:
                                 f.write(full_audio_data)
@@ -635,9 +473,9 @@ if st.session_state['analysis_result']:
                         except Exception as e:
                             st.error(f"音频合成错误: {e}")
                 else:
-                    st.warning("生成的剧本为空，无法合成。")
+                    st.warning("生成的剧本为空")
 
-    # 3. 如果音频已存在，显示播放器
+    # 播放器
     if st.session_state['podcast_file']:
         st.success("🎉 节目录制完成！(Powered by Volcano TTS)")
         st.audio(st.session_state['podcast_file'], format="audio/mp3")
@@ -645,9 +483,3 @@ if st.session_state['analysis_result']:
         if st.button("🔄 重新生成播客"):
             st.session_state['podcast_file'] = None
             st.rerun()
-
-
-
-
-
-
