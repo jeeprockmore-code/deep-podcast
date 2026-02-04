@@ -285,42 +285,42 @@ def clean_and_parse_json(llm_output):
         ]
 
 def generate_podcast_script(analysis_json_str, api_key):
-    """Generates the podcast script using DeepSeek."""
-    # ✅ 新代码（复制这段替换掉原来的 client = ...）：
-import os
-from openai import OpenAI
-import streamlit as st
-
-# 优先从 Streamlit Secrets 读取，如果没有则尝试环境变量
-try:
-    if "deepseek" in st.secrets:
-        deepseek_api_key = st.secrets["deepseek"]["api_key"]
-    else:
-        # 本地兜底逻辑
-        deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
-
-    # 初始化客户端
-    client = OpenAI(
-        api_key=deepseek_api_key,
-        base_url="https://api.deepseek.com"
-    )
-except Exception as e:
-    st.error("❌ DeepSeek 客户端初始化失败，请检查 .streamlit/secrets.toml")
-    st.stop()
+        """Generates the podcast script using DeepSeek."""
+        # ✅ 新代码（复制这段替换掉原来的 client = ...）：
+    import os
+    from openai import OpenAI
+    import streamlit as st
+    
+    # 优先从 Streamlit Secrets 读取，如果没有则尝试环境变量
     try:
-        response = client.chat.completions.create(
-            model="deepseek-chat",
-            messages=[
-                {"role": "system", "content": PODCAST_PROMPT},
-                {"role": "user", "content": analysis_json_str}
-            ],
-            stream=False
+        if "deepseek" in st.secrets:
+            deepseek_api_key = st.secrets["deepseek"]["api_key"]
+        else:
+            # 本地兜底逻辑
+            deepseek_api_key = os.getenv("DEEPSEEK_API_KEY", "")
+    
+        # 初始化客户端
+        client = OpenAI(
+            api_key=deepseek_api_key,
+            base_url="https://api.deepseek.com"
         )
-        content = response.choices[0].message.content
-        return clean_and_parse_json(content)
     except Exception as e:
-        st.error(f"Podcast Script Generation Failed: {e}")
-        return None
+        st.error("❌ DeepSeek 客户端初始化失败，请检查 .streamlit/secrets.toml")
+        st.stop()
+        try:
+            response = client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": PODCAST_PROMPT},
+                    {"role": "user", "content": analysis_json_str}
+                ],
+                stream=False
+            )
+            content = response.choices[0].message.content
+            return clean_and_parse_json(content)
+        except Exception as e:
+            st.error(f"Podcast Script Generation Failed: {e}")
+            return None
 
 def synthesize_volcano(text, voice_type, output_file):
     """Synthesizes one segment using Volcano TTS API."""
@@ -519,3 +519,4 @@ if st.session_state['analysis_result']:
     if st.session_state['podcast_file']:
         st.success("节目录制完成！(Powered by Volcano TTS)")
         st.audio(st.session_state['podcast_file'], format="audio/mp3")
+
