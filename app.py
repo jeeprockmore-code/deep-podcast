@@ -287,10 +287,10 @@ if st.session_state['analysis_result']:
                             full_audio = b""
                             progress_bar = st.progress(0)
                             
+                            # ... (你的 for 循环头还在) ...
                             for i, item in enumerate(items):
-                                # 使用特调音色
+                                # 1. 准备参数 (保持不变)
                                 voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
-                                
                                 header = {"Authorization": f"Bearer; {TOKEN}"}
                                 req_json = {
                                     "app": {"appid": APPID, "token": "access_token", "cluster": CLUSTER},
@@ -298,16 +298,26 @@ if st.session_state['analysis_result']:
                                     "audio": {
                                         "voice_type": voice,
                                         "encoding": "mp3",
-                                        "speed_ratio": 1.2, # 1.2倍速
+                                        "speed_ratio": 1.2,
                                         "volume_ratio": 1.0, "pitch_ratio": 1.0
                                     },
                                     "request": {"text": item["text"], "text_type": "plain", "operation": "query", "with_frontend": 1, "frontend_type": "unitTson"}
                                 }
-                                resp = requests.post(VOLCANO_URL, json=req_json, headers=header)
-                                if "data" in resp.json(): full_audio += base64.b64decode(resp.json()["data"])
+                                
+                                # 2. 发送请求 (这一行是本来就有的)
+                                # 确保 URL 是 clean_url 或者直接写死字符串，不要带 markdown
+                                resp = requests.post("https://openspeech.bytedance.com/api/v1/tts", json=req_json, headers=header)
+                                
+                                # =========== 👇 重点修改这里 👇 ===========
+                                resp_data = resp.json() # 先把结果拿出来
+                                
+                                if "data" in resp_data:
+                                    # 成功：拼接到音频里
+                                    full_audio += base64.b64decode(resp_data["data"])
+                                else:
+                                    # 失败：❌ 这一次必须打印出来！
+                                    st.error(f"第 {i+1} 句合成失败！火山引擎说：{resp_data}")
+                                # ========================================
+                                
                                 progress_bar.progress((i+1)/len(items))
-                            
-                            with open("podcast.mp3", "wb") as f: f.write(full_audio)
-                            st.session_state['podcast_file'] = "podcast.mp3"; st.rerun()
-                        except Exception as e: st.error(f"合成失败: {e}")
-                else: st.warning("剧本为空或解析失败，请重试")
+
