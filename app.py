@@ -317,7 +317,7 @@ except Exception as e:
             stream=False
         )
         content = response.choices[0].message.content
-        return clean_and_parse_json(content)
+return clean_and_parse_json(content)
     except Exception as e:
         st.error(f"Podcast Script Generation Failed: {e}")
         return None
