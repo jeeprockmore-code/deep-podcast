@@ -6,19 +6,18 @@ import ast
 from openai import OpenAI
 
 # ==========================================
-# 1. 页面配置 & 极简黑白 UI (强制覆盖暗色模式 + 字体修复)
+# 1. 页面配置 & 极简黑白 UI (修复按钮文字颜色)
 # ==========================================
 st.set_page_config(
     page_title="反矫情战略顾问",
     page_icon="🖤",
     layout="centered",
-    initial_sidebar_state="collapsed"  # 侧边栏默认收起，保持界面干净
+    initial_sidebar_state="collapsed"
 )
 
 # CSS 修复核心：
-# 1. 强制背景白
-# 2. 强制所有文字（包括标题、正文、Label）黑
-# 3. 强制输入框提示词深灰
+# 1. 背景全白，普通文字全黑
+# 2. 修复：按钮文字强制回白色 (覆盖掉全局黑色规则)
 st.markdown("""
 <style>
     /* 1. 强制全局背景白，文字黑 */
@@ -28,8 +27,7 @@ st.markdown("""
         font-family: 'Courier New', Courier, monospace; 
     }
     
-    /* 2. 🔥 核心修复：强制所有 Label (问题标题) 和 Markdown 文本为黑色 */
-    /* 解决手机暗色模式下，标题和正文变成白色导致看不清的问题 */
+    /* 2. 强制所有 Label 和 Markdown 文本为黑色 (解决手机看不清问题) */
     label, .stMarkdown, .stMarkdown p, [data-testid="stMarkdownContainer"] p, .stTextArea label {
         color: #000000 !important;
     }
@@ -39,26 +37,31 @@ st.markdown("""
         background-color: #f4f4f4 !important; 
         color: #000000 !important; 
         border: 1px solid #333333 !important; 
-        caret-color: #000000 !important; /* 光标颜色 */
+        caret-color: #000000 !important; 
     }
     
-    /* 4. 强制提示词(Placeholder)颜色为深灰 */
+    /* 4. 强制提示词颜色为深灰 */
     .stTextArea textarea::placeholder {
         color: #555555 !important;
         opacity: 1 !important; 
         font-weight: normal;
     }
     
-    /* 5. 按钮样式 */
+    /* 5. 按钮样式 - 🔥这里修复了BUG🔥 */
     .stButton > button { 
         background-color: #000000 !important; 
-        color: #ffffff !important; 
+        color: #ffffff !important; /* 强制文字白 */
         border: none; 
         width: 100%; 
         padding: 10px; 
         font-weight: bold; 
         transition: all 0.3s; 
     }
+    /* 强制按钮内部的 p 标签也变白 (防止被全局黑色规则覆盖) */
+    .stButton > button p {
+        color: #ffffff !important; 
+    }
+    
     .stButton > button:hover { 
         background-color: #333333 !important; 
         color: #ffffff !important; 
@@ -89,18 +92,16 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. API Key 配置 (后台静默加载，不显示UI)
+# 2. API Key 配置 (后台静默加载)
 # ==========================================
 api_key = None
-
-# 优先读取 .streamlit/secrets.toml，其次读取环境变量
 if "deepseek" in st.secrets:
     api_key = st.secrets["deepseek"]["api_key"]
 elif os.getenv("DEEPSEEK_API_KEY"):
     api_key = os.getenv("DEEPSEEK_API_KEY")
 
 # ==========================================
-# 3. 页面标题 & 七维扫描输入区 (文案100%保留)
+# 3. 页面标题 & 输入区 (文案100%保留)
 # ==========================================
 st.title("反矫情战略顾问")
 st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种不开心与想不开*")
@@ -253,7 +254,6 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
     if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
         st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
-        # 这里的错误提示只会在 Secrets 没配置对的时候出现
         st.error("❌ 系统错误：未检测到 API Key。请在后台 .streamlit/secrets.toml 中配置 [deepseek] api_key。")
     else:
         # 完整的 Prompt 拼接
