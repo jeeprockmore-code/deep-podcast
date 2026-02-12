@@ -1,15 +1,12 @@
 import streamlit as st
 import os
 import json
-import requests
-import uuid  # ✅ 必须用到这个库生成身份证号 reqid
-import base64
 import re
 import ast
 from openai import OpenAI
 
 # ==========================================
-# 1. 页面配置 & 极简黑白 UI
+# 1. 页面配置 & 极简黑白 UI (强制覆盖暗色模式)
 # ==========================================
 st.set_page_config(
     page_title="反矫情战略顾问",
@@ -18,37 +15,73 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# CSS 修复核心：
+# 1. [data-testid="stAppViewContainer"] 强制背景全白，覆盖手机系统暗色模式
+# 2. textarea::placeholder 强制提示词颜色，解决看不清的问题
 st.markdown("""
 <style>
-    /* Global Styles */
-    .stApp { background-color: #ffffff; color: #000000; font-family: 'Courier New', Courier, monospace; }
-    /* Input Fields */
-    .stTextArea textarea { background-color: #f0f0f0; color: #000000; border: 1px solid #000000; }
-    /* Buttons */
-    .stButton > button { background-color: #000000; color: #ffffff; border: none; width: 100%; padding: 10px; font-weight: bold; transition: all 0.3s; }
-    .stButton > button:hover { background-color: #333333; color: #ffffff; }
-    /* Titles */
-    h1, h2, h3 { color: #000000; font-weight: 900; }
-    /* Custom Cards */
-    .psych-card { border: 2px solid #000000; padding: 20px; margin-bottom: 20px; background-color: #ffffff; box-shadow: 5px 5px 0px #000000; }
-    .psych-card-title { font-size: 1.2em; font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #000000; padding-bottom: 5px; text-transform: uppercase; }
+    /* 强制全局背景白，文字黑 */
+    .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { 
+        background-color: #ffffff !important; 
+        color: #000000 !important; 
+        font-family: 'Courier New', Courier, monospace; 
+    }
+    
+    /* 输入框样式修正 */
+    .stTextArea textarea { 
+        background-color: #f4f4f4 !important; 
+        color: #000000 !important; 
+        border: 1px solid #333333 !important; 
+        caret-color: #000000 !important; /* 光标颜色 */
+    }
+    
+    /* 🔥 关键修复：强制提示词(Placeholder)颜色为深灰，防止在手机暗色模式下隐身 */
+    .stTextArea textarea::placeholder {
+        color: #555555 !important;
+        opacity: 1 !important; /* 兼容 Firefox */
+        font-weight: normal;
+    }
+    
+    /* 按钮样式 */
+    .stButton > button { 
+        background-color: #000000 !important; 
+        color: #ffffff !important; 
+        border: none; 
+        width: 100%; 
+        padding: 10px; 
+        font-weight: bold; 
+        transition: all 0.3s; 
+    }
+    .stButton > button:hover { 
+        background-color: #333333 !important; 
+        color: #ffffff !important; 
+    }
+    
+    /* 标题样式 */
+    h1, h2, h3 { color: #000000 !important; font-weight: 900; }
+    
+    /* 结果卡片样式 */
+    .psych-card { 
+        border: 2px solid #000000; 
+        padding: 20px; 
+        margin-bottom: 20px; 
+        background-color: #ffffff; 
+        box-shadow: 5px 5px 0px #000000; 
+        color: #000000;
+    }
+    .psych-card-title { 
+        font-size: 1.2em; 
+        font-weight: bold; 
+        margin-bottom: 10px; 
+        border-bottom: 1px solid #000000; 
+        padding-bottom: 5px; 
+        text-transform: uppercase; 
+    }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 特调参数区 (音色配置)
-# ==========================================
-# ⚠️ 注意：如果 BV700_V2 报错，请手动将下面这行改成 "BV004_streaming"
-VOICE_ID_FEMALE = "BV700_V2_streaming"  # 莎莎(毒舌版)
-VOICE_ID_MALE = "BV102_streaming"       # 阿强(憨厚版)
-CLUSTER = "volcano_tts"
-
-# 启动自检
-if "volcano" not in st.secrets:
-    st.error("🚨 严重错误：Secrets 中未找到 [volcano] 配置！请检查 .streamlit/secrets.toml")
-
-# ==========================================
-# 3. 侧边栏
+# 2. 侧边栏 (API Key 配置)
 # ==========================================
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -66,7 +99,7 @@ st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种
 st.markdown("---")
 
 # ==========================================
-# 4. 七维扫描输入区 (文案已恢复原版！一个字没少！)
+# 3. 七维扫描输入区
 # ==========================================
 st.subheader("🕵️ 七维心理扫描 (Seven-Dimensional Scan)")
 col1, col2 = st.columns(2)
@@ -111,7 +144,7 @@ with col2:
     )
 
 # ==========================================
-# 5. Prompts (完整结构化版，未删减)
+# 4. Prompts (纯文本分析版)
 # ==========================================
 SYSTEM_PROMPT = """
 # Role:
@@ -172,25 +205,8 @@ Key 结构如下：
 }
 """
 
-PODCAST_PROMPT = """
-# Role:
-你是《深夜解剖室》的制作人。请将分析报告改编成一段**极其生活化、甚至琐碎**的男女闲聊。
-
-# Characters:
-1. 阿强(男): 好奇、反应慢半拍、捧哏。
-2. 莎莎(女): 毒舌、慵懒、看透一切。
-
-# Constraints:
-1. **禁止比喻:** 别说什么“走钢丝”、“安抚奶嘴”。直接说“吓得不敢动”、“就是为了偷懒”。
-2. **禁止翻译腔:** 像两个人在撸串时聊天。多用“哎”、“那个啥”、“你知道吧”。
-3. **结构:** 闲聊开场 -> 吐槽真面目 -> 揭穿借口 -> 给出那个“狡猾”的建议。
-
-# Output JSON:
-[{"role": "Male", "text": "..."}, {"role": "Female", "text": "..."}]
-"""
-
 # ==========================================
-# 6. 核心工具：强力 JSON 解析器
+# 5. 核心工具：强力 JSON 解析器
 # ==========================================
 def parse_json_robust(content):
     if not content: return None
@@ -198,20 +214,14 @@ def parse_json_robust(content):
     
     # 找 {}
     first_brace = clean_content.find("{")
-    # 找 []
-    first_bracket = clean_content.find("[")
     
     start = -1
-    if first_brace != -1 and first_bracket != -1:
-        start = min(first_brace, first_bracket)
-    elif first_brace != -1:
+    if first_brace != -1:
         start = first_brace
-    elif first_bracket != -1:
-        start = first_bracket
         
     if start == -1: return None
     
-    end = max(clean_content.rfind("}"), clean_content.rfind("]"))
+    end = clean_content.rfind("}")
     if end == -1: return None
     
     json_str = clean_content[start:end+1]
@@ -227,51 +237,20 @@ def parse_json_robust(content):
         except:
             return None
 
-def generate_podcast_script(analysis_json_str, api_key):
-    try:
-        final_key = api_key
-        if not final_key and "deepseek" in st.secrets:
-            final_key = st.secrets["deepseek"]["api_key"]
-        
-        client = OpenAI(api_key=final_key, base_url="https://api.deepseek.com")
-        
-        response = client.chat.completions.create(
-            model="deepseek-chat", 
-            messages=[
-                {"role": "system", "content": PODCAST_PROMPT},
-                {"role": "user", "content": analysis_json_str}
-            ],
-            stream=False,
-            temperature=1.3 
-        )
-        content = response.choices[0].message.content
-        data = parse_json_robust(content)
-        
-        if data:
-            if isinstance(data, list): return {"podcast": data}
-            return data
-        else:
-            st.warning("⚠️ 剧本生成：无法识别 JSON，请重试"); st.code(content); return None
-            
-    except Exception as e:
-        st.error(f"剧本生成错误: {e}")
-        return None
-
 # ==========================================
-# 7. 主程序逻辑
+# 6. 主程序逻辑
 # ==========================================
 if 'analysis_result' not in st.session_state: st.session_state['analysis_result'] = None
-if 'podcast_file' not in st.session_state: st.session_state['podcast_file'] = None
 
-# --- 按钮 1: 深度分析 ---
+# --- 按钮: 深度分析 ---
 if st.button("开始降维打击 (Generate)", key="btn_gen"):
-    # 检查输入完整性 (保留你的变量名)
+    # 检查输入完整性
     if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
         st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
         st.error("❌ 缺少 API Key")
     else:
-        # 完整的 Prompt 拼接 (原汁原味)
+        # 完整的 Prompt 拼接
         user_prompt = f"""
         # User Input Data (7 Dimensions):
         1. 真面目 (Mask): {input_mask}
@@ -296,7 +275,6 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
                 
                 if parsed_data:
                     st.session_state['analysis_result'] = parsed_data
-                    st.session_state['podcast_file'] = None
                     st.rerun()
                 else:
                     st.error("❌ JSON 解析失败，DeepSeek 可能输出了无效格式"); st.caption("原始返回如下："); st.code(content)
@@ -304,7 +282,7 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
             except Exception as e:
                 st.error(f"API Error: {e}")
 
-# --- 结果展示 & 播客生成 ---
+# --- 结果展示 ---
 if st.session_state['analysis_result']:
     data = st.session_state['analysis_result']
     coords = data.get("coordinates", {})
@@ -321,78 +299,3 @@ if st.session_state['analysis_result']:
     st.markdown("### 🔍 深度分析报告")
     for t, txt in cards:
         st.markdown(f"<div class='psych-card'><div class='psych-card-title'>{t}</div><div>{txt}</div></div>", unsafe_allow_html=True)
-
-    st.divider(); st.header("🎧 深夜解剖室 (Podcast)")
-
-    if st.session_state['podcast_file']:
-        st.success("🎉 节目录制完成！")
-        st.audio(st.session_state['podcast_file'], format="audio/mp3")
-        if st.button("🔄 重新生成"): st.session_state['podcast_file'] = None; st.rerun()
-    else:
-        # --- 按钮 2: 生成播客 (TTS) ---
-        if st.button("生成我的专属播客 (Generate Podcast)"):
-            if "volcano" not in st.secrets:
-                st.error("❌ 严重错误：未配置火山引擎 Secrets！")
-            else:
-                APPID = st.secrets["volcano"]["appid"]
-                TOKEN = st.secrets["volcano"]["token"]
-                VOLCANO_URL = "https://openspeech.bytedance.com/api/v1/tts" # 干净 URL
-
-                with st.spinner("✍️ DeepSeek 正在撰写剧本..."):
-                    import json
-                    script_data = generate_podcast_script(json.dumps(data, ensure_ascii=False), api_key)
-                    items = script_data.get("podcast", []) if script_data else []
-
-                if items:
-                    with st.spinner(f"🎙️ 火山引擎正在录制 {len(items)} 段对话..."):
-                        try:
-                            full_audio = b""
-                            progress_bar = st.progress(0)
-                            error_count = 0
-                            
-                            for i, item in enumerate(items):
-                                voice = VOICE_ID_FEMALE if item["role"] == "Female" else VOICE_ID_MALE
-                                header = {"Authorization": f"Bearer; {TOKEN}"}
-                                
-                                # 🔥🔥🔥 关键修复：补回了 reqid，这是火山引擎必须的！
-                                req_json = {
-                                    "app": {"appid": APPID, "token": "access_token", "cluster": CLUSTER},
-                                    "user": {"uid": "user_1"},
-                                    "audio": {
-                                        "voice_type": voice,
-                                        "encoding": "mp3",
-                                        "speed_ratio": 1.2,
-                                        "volume_ratio": 1.0, "pitch_ratio": 1.0
-                                    },
-                                    "request": {
-                                        "reqid": str(uuid.uuid4()),  # ✅ 缺的身份证在这里！
-                                        "text": item["text"], 
-                                        "text_type": "plain", 
-                                        "operation": "query", 
-                                        "with_frontend": 1, 
-                                        "frontend_type": "unitTson"
-                                    }
-                                }
-                                
-                                # 发送请求
-                                resp = requests.post(VOLCANO_URL, json=req_json, headers=header)
-                                resp_data = resp.json()
-                                
-                                if "data" in resp_data:
-                                    full_audio += base64.b64decode(resp_data["data"])
-                                else:
-                                    error_count += 1
-                                    st.error(f"⚠️ 第 {i+1} 句合成失败！火山引擎返回：{resp_data}")
-                                
-                                progress_bar.progress((i+1)/len(items))
-                            
-                            if len(full_audio) > 0:
-                                with open("podcast.mp3", "wb") as f: f.write(full_audio)
-                                st.session_state['podcast_file'] = "podcast.mp3"; st.rerun()
-                            else:
-                                st.error("❌ 音频合成失败，请查看上方的报错信息。")
-                                
-                        except Exception as e: 
-                            st.error(f"合成程序崩溃: {e}")
-                else: 
-                    st.warning("剧本为空或解析失败")
