@@ -6,28 +6,35 @@ import ast
 from openai import OpenAI
 
 # ==========================================
-# 1. 页面配置 & 极简黑白 UI (强制覆盖暗色模式)
+# 1. 页面配置 & 极简黑白 UI (强制覆盖暗色模式 + 字体修复)
 # ==========================================
 st.set_page_config(
     page_title="反矫情战略顾问",
     page_icon="🖤",
     layout="centered",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"  # 侧边栏默认收起，保持界面干净
 )
 
 # CSS 修复核心：
-# 1. [data-testid="stAppViewContainer"] 强制背景全白，覆盖手机系统暗色模式
-# 2. textarea::placeholder 强制提示词颜色，解决看不清的问题
+# 1. 强制背景白
+# 2. 强制所有文字（包括标题、正文、Label）黑
+# 3. 强制输入框提示词深灰
 st.markdown("""
 <style>
-    /* 强制全局背景白，文字黑 */
+    /* 1. 强制全局背景白，文字黑 */
     .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] { 
         background-color: #ffffff !important; 
         color: #000000 !important; 
         font-family: 'Courier New', Courier, monospace; 
     }
     
-    /* 输入框样式修正 */
+    /* 2. 🔥 核心修复：强制所有 Label (问题标题) 和 Markdown 文本为黑色 */
+    /* 解决手机暗色模式下，标题和正文变成白色导致看不清的问题 */
+    label, .stMarkdown, .stMarkdown p, [data-testid="stMarkdownContainer"] p, .stTextArea label {
+        color: #000000 !important;
+    }
+
+    /* 3. 输入框样式修正 */
     .stTextArea textarea { 
         background-color: #f4f4f4 !important; 
         color: #000000 !important; 
@@ -35,14 +42,14 @@ st.markdown("""
         caret-color: #000000 !important; /* 光标颜色 */
     }
     
-    /* 🔥 关键修复：强制提示词(Placeholder)颜色为深灰，防止在手机暗色模式下隐身 */
+    /* 4. 强制提示词(Placeholder)颜色为深灰 */
     .stTextArea textarea::placeholder {
         color: #555555 !important;
-        opacity: 1 !important; /* 兼容 Firefox */
+        opacity: 1 !important; 
         font-weight: normal;
     }
     
-    /* 按钮样式 */
+    /* 5. 按钮样式 */
     .stButton > button { 
         background-color: #000000 !important; 
         color: #ffffff !important; 
@@ -57,10 +64,10 @@ st.markdown("""
         color: #ffffff !important; 
     }
     
-    /* 标题样式 */
+    /* 6. 标题样式 */
     h1, h2, h3 { color: #000000 !important; font-weight: 900; }
     
-    /* 结果卡片样式 */
+    /* 7. 结果卡片样式 */
     .psych-card { 
         border: 2px solid #000000; 
         padding: 20px; 
@@ -76,31 +83,29 @@ st.markdown("""
         border-bottom: 1px solid #000000; 
         padding-bottom: 5px; 
         text-transform: uppercase; 
+        color: #000000 !important;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 2. 侧边栏 (API Key 配置)
+# 2. API Key 配置 (后台静默加载，不显示UI)
 # ==========================================
-with st.sidebar:
-    st.header("⚙️ Configuration")
-    api_key = st.text_input("DeepSeek API Key", type="password")
-    
-    if not api_key:
-        if "deepseek" in st.secrets:
-            api_key = st.secrets["deepseek"]["api_key"]
-            st.success("☁️ 已自动加载云端密钥")
-        elif os.getenv("DEEPSEEK_API_KEY"):
-            api_key = os.getenv("DEEPSEEK_API_KEY")
+api_key = None
 
+# 优先读取 .streamlit/secrets.toml，其次读取环境变量
+if "deepseek" in st.secrets:
+    api_key = st.secrets["deepseek"]["api_key"]
+elif os.getenv("DEEPSEEK_API_KEY"):
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+
+# ==========================================
+# 3. 页面标题 & 七维扫描输入区 (文案100%保留)
+# ==========================================
 st.title("反矫情战略顾问")
 st.markdown("**Anti-Hypocrisy Strategy** | *DeepSeek V3.2 驱动 · 专治各种不开心与想不开*")
 st.markdown("---")
 
-# ==========================================
-# 3. 七维扫描输入区
-# ==========================================
 st.subheader("🕵️ 七维心理扫描 (Seven-Dimensional Scan)")
 col1, col2 = st.columns(2)
 
@@ -144,7 +149,7 @@ with col2:
     )
 
 # ==========================================
-# 4. Prompts (纯文本分析版)
+# 4. Prompts (纯文本分析版 - 逐字未动)
 # ==========================================
 SYSTEM_PROMPT = """
 # Role:
@@ -248,7 +253,8 @@ if st.button("开始降维打击 (Generate)", key="btn_gen"):
     if not (input_mask and input_jealousy and input_image and input_payoff and input_enemy and input_sacrifice and input_loop):
         st.warning("请填满所有空洞，诚实地面对自己。")
     elif not api_key:
-        st.error("❌ 缺少 API Key")
+        # 这里的错误提示只会在 Secrets 没配置对的时候出现
+        st.error("❌ 系统错误：未检测到 API Key。请在后台 .streamlit/secrets.toml 中配置 [deepseek] api_key。")
     else:
         # 完整的 Prompt 拼接
         user_prompt = f"""
